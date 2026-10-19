@@ -55,7 +55,7 @@ function treeGeometry(seed,detailed){
  return [wood,needles,snow].map(list=>{const g=mergeGeometries(list);list.forEach(g=>g.dispose());return g;});
 }
 export function createForest(scene,materials){
- const needleMat=new THREE.MeshStandardMaterial({map:materials.twig,alphaMap:materials.twigAlpha,normalMap:materials.twigNormal,normalScale:new THREE.Vector2(.5,.5),alphaTest:.4,side:THREE.DoubleSide,roughness:.92,color:0xd3dbcf});
+ const needleMat=new THREE.MeshStandardMaterial({map:materials.twig,normalMap:materials.twigNormal,normalScale:new THREE.Vector2(.5,.5),alphaTest:.4,side:THREE.DoubleSide,roughness:.92,color:0xd3dbcf});
  const mats=[materials.bark,needleMat,materials.branchSnow];
  const variants=Array.from({length:6},(_,i)=>[treeGeometry(140+i*83,true),treeGeometry(140+i*83,false)]);
  const layout=forestLayout(),chunks=new Map(),obj=new THREE.Object3D();

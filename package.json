@@ -1,1 +1,22 @@
-{"name":"boreal-snow-forest","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","preview":"vite preview --host 0.0.0.0","test":"node --test tests/world.test.js","test:browser":"node tests/browser.mjs"},"dependencies":{"three":"0.180.0"},"devDependencies":{"@playwright/test":"1.56.1","vite":"^8.3.4"}}
+{
+  "name": "boreal-snow-forest",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node tests/browser.mjs",
+    "review": "vite build --mode review --outDir dist-review && node tests/review.mjs",
+    "test:production": "node tests/production-smoke.mjs"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "vite": "^8.3.4"
+  }
+}

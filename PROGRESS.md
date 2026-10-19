@@ -1,34 +1,60 @@
-# Requirement audit — 2026-10-19
+# Requirement audit — 2026-10-19, close-up review pass
 
-The original objective in `goal.md` remains active. This is a working first version, not a claim that indistinguishable-from-reality fidelity has been achieved.
+The original objective in `goal.md` remains active. The scene is working and has improved, but indistinguishable-from-reality fidelity is **not achieved**. Do not mark the goal complete based on tests or the existence of detailed assets.
 
-## Verified implementation
+## Original requirements and current evidence
 
-- 200 m playable diameter: `WORLD_RADIUS = 100`, radial position clamp, terrain clearance and a 65 m flight ceiling.
-- Seamless surrounding forest: 926 trees extend to a 175 m radius; terrain extends 230 m from the centre along each axis. Atmosphere hides the outer scenery.
-- Virtual red boundary warning: visible from an 88 m radius. The real browser keyboard flight reached the edge and remained at radius 100 m. Last measured position: `[51.30351119538674, 28.37168536535305, 85.83676216531485]`.
-- Browser-tested WASD movement, Space ascent, Ctrl descent, mouse look, Escape pause, resume, help and sound toggles.
-- Both Shift keys select 14 m/s; both Alt keys select 0.8 m/s; default 4 m/s. Modifier mapping is covered by unit tests.
-- Detailed assets in source: bark, snow and rock PBR textures; photographed needle atlas; individually branched tree geometry and separate snow mantle; boulders, moss, lichen, logs, icicles, dead leaves, twigs, stems, six-armed snowflakes and 8,100 nearby hexagonal ice grains.
-- All textures and fonts are local, with asset credits and font licences.
+| Requirement | Current evidence | Assessment |
+| --- | --- | --- |
+| Highly realistic snowy forest, indistinguishable from reality | Rendered overview `/tmp/boreal-cap-final-wide.png` | Still visibly procedural, especially branch silhouettes and snow mantles. Incomplete. |
+| Detail when very close to trees, snow, ice, rocks, moss, lichen, leaves and debris | Repeatable camera review in `tests/review.mjs`; photos listed below; current geometry and materials | Several concrete defects fixed; remaining faceting and stylised vegetation prevent a full fidelity claim. |
+| 200 m freely explorable area | `WORLD_RADIUS = 100`, position clamp and terrain-clearance tests in `tests/world.test.js` | Verified implementation. |
+| Outer environment blends into an apparently endless forest | 926 trees extend to a 175 m radius; terrain spans 460 m; haze blends ground-level views | Not comprehensively verified at every boundary position and altitude. High viewpoints may reveal the scenery's extent. |
+| Virtual red warning near the edge | Warning at radius 88 m; previous full keyboard flight reached radius 100 m with warning visible | Verified in the first full browser suite; boundary logic unchanged this pass. |
+| WASD, Space, Ctrl, Shift, Alt, mouse look | Previous full browser suite; unchanged movement/input logic; current speed/modifier unit tests; production entry, W movement and Escape pause | Implemented and tested. |
 
-## Checks actually completed
+## Changes in this pass
 
-- `npm test`: 5 tests passed.
-- `npm run build`: production build passed. Three.js emits a non-fatal bundle size advisory.
-- `npm audit`: zero known dependency vulnerabilities.
-- `node tests/browser.mjs`: full production-browser exploration suite passed, including the red warning and radial stop. The test uses a self-hosted static production build and low pixel density for software-rendered CI.
-- After the final static-shadow optimisation: `SMOKE_ONLY=1 FOREST_DPR=1 node tests/browser.mjs` passed at 960 × 640. No JavaScript/render errors and no missing texture assets.
-- Wide screenshot: `/tmp/boreal-overview.png`. Boundary screenshot: `/tmp/boreal-boundary.png`. These are local QA files, not source assets.
+- Added a review-only camera harness, compiled out of production. It renders the actual scene geometry/materials at centimetre distances, rather than substituting isolated preview assets.
+- Baseline renders exposed opaque foliage atlas padding, stretched vertical snow textures, buried moss/lichen, primitive leaves and buried icicles.
+- Isolated the photographed needle silhouette by connected alpha pixels, excluding opaque UV padding.
+- Added world-space triplanar color, normal and roughness sampling for snow and rocks, correctly applying instance transforms. Steep surfaces now retain texture density.
+- Replaced moss blobs with irregular textured cushions and millimetre shoots. Added a cropped green region of the CC0 Poly Haven Moss Wood scan and its normal/roughness maps.
+- Replaced small lichen blobs with folded lobes, curved leaves with veins, textured small timber, bowed fallen logs and tapered icicles. Exposed plant anchors and icicle tips are checked against the snow height.
+- Icicle attachment points follow the timber cross-section; clear refraction is enabled near the logs. Their visible connection and optical appearance still merit refinement.
+- Reduced the oversized frost geometry to small hexagonal grains.
+- Made boulder snow edges irregular after the overview exposed an overly level cap boundary.
+- Queued all texture loads before the first asynchronous yield, preventing a cached-load race when building the needle cutout.
 
-## Outstanding fidelity audit
+## Verification actually completed
 
-- The wide view remains recognisably procedural. The requirement that the world cannot be distinguished from reality is **not yet proved**.
-- Very close tree, bark, moss, lichen, debris, icicle and snow-grain views still need dedicated rendered review. Existence of geometry and textures alone does not prove this requirement.
-- The high/low tree model transition needs visual review during travel; the two procedural variants currently consume different random sequences, which may cause visible shape changes.
-- Performance on a hardware-accelerated desktop GPU has not been measured. The provided headless environment uses slow software graphics; functional tests pass but this is not evidence of smooth interactive performance on user hardware.
-- Consider improving trunk silhouettes, irregular foliage growth and snow-mantle forms after the close-view review, using the visual evidence to choose the next change.
+- `npm test`: **10 tests passed**, covering world bounds, modifiers, terrain, deterministic forest coverage, thin curved leaf geometry, consistent moss cushion detail levels, lichen folds, outward icicle normals and rock normals.
+- `npm run build`: production build passed. The Three.js bundle size advisory is non-fatal.
+- `npm run test:production`: cold load, both detail qualities, actual entry/W movement/Escape pause, warm-cache reload, no missing resources, no shader/runtime errors, and absence of `window.__forestReview` in production all passed. This ran before the final geometry-only snow-cap edge adjustment; shaders, loading and input code were unchanged afterward.
+- Review-mode captures passed with no shader/runtime errors. Plant anchors and icicle tips clear the snow surface. The final cap edge adjustment was rendered in both rock and wide views.
+- No additional dependencies were added.
 
-## Project identity
+## Render evidence
 
-`.openai/hosting.json` contains the authoritative Sites project ID. Reuse it; do not create another site. Source is a self-contained Vite + Three.js project rooted in this directory. The Sites workflow helper initialized the local Git repository. Publishing must use the pushed source commit and matching build archive.
+- Original close-up images are preserved under `/tmp/boreal-baseline/`.
+- Final bark, moss, lichen, icicle and snow views: `/tmp/boreal-close-final-{bark,moss,lichen,icicle,snow}.png`.
+- Leaf and rock views from the intermediate full review: `/tmp/boreal-final-review/boreal-close-before-{leaf,rock}.png`.
+- Final rock and overview after irregular cap edges: `/tmp/boreal-cap-final-{rock,wide}.png`.
+- Production overview with UI, before that last cap adjustment: `/tmp/boreal-production-updated.png`.
+- Adjacent JSON files record camera positions and render errors. These `/tmp` QA artifacts are not deployed source assets.
+- Reproduce with `npm run review`; `REVIEW_PREFIX` chooses a file prefix and `REVIEW_VIEWS` filters comma-separated views. The default produces `/tmp/boreal-review-*.png`.
+
+## Outstanding work toward the full objective
+
+1. Tree branches, trunk silhouettes and snow mantles remain visibly faceted in close views. Needle scale and repeated crown forms still need attention.
+2. High/low tree models consume different random sequences, so their shapes can change at the detail transition. Preserve one underlying branching structure across levels, then verify moving views.
+3. Moss and lichen have more detail but still look like generated clumps at very close range. Improve their surface conformity, shape variation and contact shading from rendered evidence.
+4. Individual falling snowflakes use flat six-arm sprites. Their close-up appearance has not been proved realistic.
+5. Verify the endless-forest illusion from multiple edge locations and high viewpoints; extend distant scenery if those views expose its boundary.
+6. Interactive performance on hardware-accelerated desktop graphics remains unmeasured. Headless software graphics verify function and rendering correctness, not smooth user performance.
+
+## Project identity and publishing
+
+Reuse `.openai/hosting.json` project ID `appgprj_6ad6027130b88191b7a2473dc43a243a`. The site is owner-private at https://boreal-winter-wilderness.crispbuddy34.chatgpt.site. Do not create another site or change its audience.
+
+Use the Sites source workflow helper for source push and matching archive packaging. The previous live source commit was `894ed56124b9686b4437fa2955a2d9e1ac3e40a1`. Publishing this pass will create a later version of the same project. Credentials are short-lived and must remain in session memory, passed only through helper stdin.

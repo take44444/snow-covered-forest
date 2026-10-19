@@ -32,7 +32,8 @@ Normal movement is 4 m/s. Vertical controls allow free flight; the camera cannot
 - 926 deterministic trees in a 350 m diameter surrounding forest, with six variants, tapered trunks, branching timber, needle sprays and separate irregular snow deposits.
 - Detailed nearby trees and reduced distant geometry with spatial culling.
 - Undulating snow terrain with physically based 2K snow, bark and rock color, normal and roughness textures.
-- Snow-covered boulders, moss and lichen patches, fallen logs, icicles, small stems, twigs and fallen leaves.
+- Snow-covered boulders with textured moss shoots and folded lichen, bowed fallen logs, tapered icicles above the snow, small stems, textured twigs and curled leaves with veins.
+- World-space snow and rock texture projection preserves detail across steep and instanced surfaces; photographed foliage is isolated from atlas padding.
 - Six-armed drifting snowflakes, 8,100 nearby millimetre-scale 3D ice grains, fine snow surface highlights, atmospheric sky, soft moving sun shadows, blue ambient light and distance haze.
 - Optional synthesized ambient wind and movement texture. Audio starts only after interaction.
 
@@ -44,7 +45,12 @@ All runtime material and font assets are served locally. No API keys or runtime 
 npm test
 npm run build
 npm run test:browser
+npm run test:production
+# Dedicated close-up review with a camera harness omitted from production:
+npm run review
 ```
+
+The production smoke suite checks both rendering qualities, entry/movement/pause, warm-cache reload and absence of the review camera API. `npm run review` creates seven close-up views and an overview under `/tmp/boreal-review-*.png` and checks plant exposure and icicle clearance. Use `REVIEW_PREFIX` or `REVIEW_VIEWS` to select the output prefix or views.
 
 The browser suite serves the production build automatically and accepts `CHROMIUM_PATH` and `FOREST_URL` environment variables. Install the matching browser with `npx playwright install chromium` if necessary. Browser screenshots are written under `/tmp/boreal-*.png`. The suite checks actual keyboard movement, mouse rotation, ascent/descent, pause/resume, sound, help, boundary warning and the enforced world limit. Read-only scene telemetry is available at `window.__forest.state`.
 
@@ -54,6 +60,7 @@ The following scanned materials by **Rob Tuytel / Poly Haven** are licensed **CC
 
 - [Snow 02](https://polyhaven.com/a/snow_02)
 - [Bark Brown 02](https://polyhaven.com/a/bark_brown_02)
+- [Moss Wood](https://polyhaven.com/a/moss_wood), a cropped green region used for the moss cushion surface
 - [Rock Boulder Cracked](https://polyhaven.com/a/rock_boulder_cracked)
 - [Pine Tree 01](https://polyhaven.com/a/pine_tree_01), photographed twig color, alpha and normal atlas (Rico Cilliers / Rob Tuytel)
 

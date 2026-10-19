@@ -1,8 +1,10 @@
 import * as THREE from 'three';
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {Sky} from 'three/addons/objects/Sky.js';
 import {createForest} from './forest.js';
 import {createFrost} from './frost.js';
+import {needleCutout} from './needle-cutout.js';
+import {configureSnowMaterial,configureWorldMaterial} from './snow-material.js';
+import {createGroundDetails} from './ground-details.js';
 import {randomGenerator,noise,snowHeight,terrainHeight,constrainPosition,movementSpeed,WORLD_RADIUS,WARNING_RADIUS} from './world.js';
 const $=id=>document.getElementById(id);
 const state={ready:false,active:false,locked:false,sound:false,frames:0,fps:0,quality:'high'};
@@ -22,16 +24,15 @@ async function init(){
  const loader=new THREE.TextureLoader(manager);
  const snowMap=texture(loader,'snow_02','diff'),snowNormal=texture(loader,'snow_02','nor_gl'),snowRough=texture(loader,'snow_02','rough');
  const snowMaterial=new THREE.MeshPhysicalMaterial({color:0xf0f5fa,map:snowMap,normalMap:snowNormal,normalScale:new THREE.Vector2(.45,.45),roughnessMap:snowRough,roughness:.93,metalness:0,clearcoat:.12,clearcoatRoughness:.45});
- snowMaterial.onBeforeCompile=shader=>{
-  shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vSnowWorld;');
-  shader.vertexShader=shader.vertexShader.replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvSnowWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-  shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vSnowWorld;\nfloat grain(vec3 p) { return fract(sin(dot(p,vec3(12.9898,78.233,39.425)))*43758.5453); }');
-  shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nfloat crystal = pow(grain(floor(vSnowWorld*950.0)),95.0);\nroughnessFactor = clamp(roughnessFactor - crystal*.35, .35, 1.0);');
-  shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>','gl_FragColor.rgb += crystal*.055;\n#include <dithering_fragment>');
- };
- const branchSnow=snowMaterial.clone();branchSnow.onBeforeCompile=snowMaterial.onBeforeCompile;
+ configureSnowMaterial(snowMaterial);
+ const branchSnow=configureSnowMaterial(snowMaterial.clone());
  const bark=new THREE.MeshStandardMaterial({map:texture(loader,'bark_brown_02','diff',2),normalMap:texture(loader,'bark_brown_02','nor_gl',2),roughnessMap:texture(loader,'bark_brown_02','rough',2),normalScale:new THREE.Vector2(.9,.9),roughness:1,color:0xa7aaa0});
  const rock=new THREE.MeshStandardMaterial({map:texture(loader,'rock_boulder_cracked','diff'),normalMap:texture(loader,'rock_boulder_cracked','nor_gl'),roughnessMap:texture(loader,'rock_boulder_cracked','rough'),roughness:1,color:0x8e9995});
+ configureWorldMaterial(rock,{repeat:1,sparkle:false});
+ const twig=texture(loader,'pine_tree_01_twig','diff'),twigAlpha=texture(loader,'pine_tree_01_twig','alpha'),twigNormal=texture(loader,'pine_tree_01_twig','nor_gl');
+ for(const t of [twig,twigAlpha,twigNormal]){t.repeat.set(.295,.175);t.offset.set(.648,.477);}
+
+ const mossMaps={diff:texture(loader,'moss_wood','diff'),normal:texture(loader,'moss_wood','nor_gl'),rough:texture(loader,'moss_wood','rough')};
  const sky=new Sky();sky.scale.setScalar(400);sky.material.uniforms.turbidity.value=5;sky.material.uniforms.rayleigh.value=1.2;sky.material.uniforms.mieCoefficient.value=.005;sky.material.uniforms.mieDirectionalG.value=.85;
  const sunDirection=new THREE.Vector3(-.5,.32,-.75).normalize();sky.material.uniforms.sunPosition.value.copy(sunDirection);scene.add(sky);
  const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(sky,.04).texture;scene.environmentIntensity=.35;pmrem.dispose();
@@ -45,10 +46,10 @@ async function init(){
  terrain.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));terrain.computeVertexNormals();snowMaterial.vertexColors=true;
  const ground=new THREE.Mesh(terrain,snowMaterial);ground.receiveShadow=true;scene.add(ground);
  await new Promise(resolve=>setTimeout(resolve,30));$('load-status').textContent='Laying snow on the branches…';
- const twig=texture(loader,'pine_tree_01_twig','diff'),twigAlpha=texture(loader,'pine_tree_01_twig','alpha'),twigNormal=texture(loader,'pine_tree_01_twig','nor_gl');
- for(const t of [twig,twigAlpha,twigNormal]){t.repeat.set(.295,.175);t.offset.set(.648,.477);}
- forest=createForest(scene,{bark,branchSnow,twig,twigAlpha,twigNormal});forest.update(camera);
- createGroundDetails({snowMaterial:branchSnow,bark,rock});createSnowfall();frost=createFrost(scene);frost.update(camera);
+ await loaded;if(assetErrors.length)throw new Error('Some forest textures could not load. Please reload.');
+ const cleanTwig=needleCutout(twig.image,twigAlpha.image);
+ forest=createForest(scene,{bark,branchSnow,twig:cleanTwig,twigNormal});forest.update(camera);
+ const groundDetails=createGroundDetails(scene,{snowMaterial:branchSnow,bark,rock,mossMaps}),detailAnchors=groundDetails.anchors;groundDetails.update(camera);createSnowfall();frost=createFrost(scene);frost.update(camera);
  await loaded;
  if(assetErrors.length)throw new Error('Some forest textures could not load. Please reload.');
  clock=new THREE.Clock();
@@ -58,61 +59,26 @@ async function init(){
   if(frameWindow>.7){state.fps=Math.round(frameCount/frameWindow);frameWindow=0;frameCount=0;}
   if(state.active){let remaining=dt;while(remaining>0){const step=Math.min(.04,remaining);updateMovement(step);remaining-=step;}}
   else if(!state.everEntered){camera.position.y=snowHeight(3,11)+1.75+Math.sin(elapsed*.3)*.015;camera.rotation.set(pitch+Math.sin(elapsed*.07)*.005,yaw+Math.sin(elapsed*.045)*.012,0);}
-  if(elapsed-lastLOD>.5){const forestChanged=forest.update(camera);frost.update(camera);lastLOD=elapsed;const cx=Math.round(camera.position.x/8)*8,cz=Math.round(camera.position.z/8)*8;if(forestChanged||sun.target.position.x!==cx||sun.target.position.z!==cz){sun.target.position.set(cx,0,cz);sun.position.set(cx+sunDirection.x*70,sunDirection.y*70,cz+sunDirection.z*70);sun.target.updateMatrixWorld();renderer.shadowMap.needsUpdate=true;}}
+  if(elapsed-lastLOD>.5){const forestChanged=forest.update(camera);frost.update(camera);groundDetails.update(camera,state.quality);lastLOD=elapsed;const cx=Math.round(camera.position.x/8)*8,cz=Math.round(camera.position.z/8)*8;if(forestChanged||sun.target.position.x!==cx||sun.target.position.z!==cz){sun.target.position.set(cx,0,cz);sun.position.set(cx+sunDirection.x*70,sunDirection.y*70,cz+sunDirection.z*70);sun.target.updateMatrixWorld();renderer.shadowMap.needsUpdate=true;}}
   snow.material.uniforms.uTime.value=elapsed;snow.position.copy(camera.position);
   if(windGain&&state.sound){windGain.gain.setTargetAtTime(.025+Math.sin(elapsed*.23)*.009,audio.currentTime,.5);windFilter.frequency.setTargetAtTime(450+Math.sin(elapsed*.15)*180,audio.currentTime,.6);footGain.gain.setTargetAtTime(state.active&&(keys.has('KeyW')||keys.has('KeyS')||keys.has('KeyA')||keys.has('KeyD'))&&camera.position.y<snowHeight(camera.position.x,camera.position.z)+2.3?.008*(.4+Math.sin(elapsed*12)**6):0,audio.currentTime,.1);}
   renderer.render(scene,camera);state.frames++;
  });
  await renderer.compileAsync(scene,camera);state.ready=true;$('loading').classList.add('gone');setTimeout(()=>$('loading').hidden=true,1200);
+ // This camera harness is compiled out of production builds.
+ if(import.meta.env.MODE==='review'){
+  renderer.setAnimationLoop(null);state.everEntered=true;
+  window.__forestReview={anchors:{trees:forest.layout,...detailAnchors},setView(position,target){
+   camera.position.fromArray(position);camera.lookAt(new THREE.Vector3(...target));yaw=camera.rotation.y;pitch=camera.rotation.x;camera.updateMatrixWorld();forest.update(camera);frost.update(camera);groundDetails.update(camera);
+   sun.target.position.set(camera.position.x,0,camera.position.z);sun.position.copy(sun.target.position).addScaledVector(sunDirection,70);sun.target.updateMatrixWorld();renderer.shadowMap.needsUpdate=true;
+   renderer.render(scene,camera);return {position:camera.position.toArray(),target,triangles:renderer.info.render.triangles};
+  }};
+ }
  // Read-only telemetry used by automated acceptance checks and performance inspection.
  window.__forest={get state(){return {...state,position:camera.position.toArray(),rotation:camera.rotation.toArray(),trees:forest.layout.length,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,assetErrors:[...assetErrors]};},terrainHeight:snowHeight};
  }catch(error){console.error(error);showError(`This forest needs a browser with WebGL 2 support. ${error.message}`);}
 }
 function showError(message){$('loading').hidden=true;$('error').hidden=false;$('error').textContent=message;}
-function createGroundDetails({snowMaterial,bark,rock}){
- const mossMat=new THREE.MeshStandardMaterial({color:0x45513a,roughness:1});const lichenMat=new THREE.MeshStandardMaterial({color:0x9aab8d,roughness:1});
- // A shared irregular boulder surface; snow conforms to the upper surface.
- const rockGeo=new THREE.IcosahedronGeometry(1,3),rp=rockGeo.attributes.position;
- for(let i=0;i<rp.count;i++){const v=new THREE.Vector3().fromBufferAttribute(rp,i);v.multiplyScalar(.9+noise(v.x*4+12,v.z*4+v.y)*.22);rp.setXYZ(i,v.x,v.y,v.z);}rockGeo.computeVertexNormals();
- const capGeo=new THREE.SphereGeometry(1,32,20,0,Math.PI*2,0,Math.PI*.52),cp=capGeo.attributes.position,cu=capGeo.attributes.uv;
- for(let i=0;i<cp.count;i++){const v=new THREE.Vector3().fromBufferAttribute(cp,i);v.multiplyScalar(1.02+noise(v.x*4+12,v.z*4+v.y)*.13);v.y+=.12;cp.setXYZ(i,v.x,v.y,v.z);cu.setXY(i,v.x,v.z);}capGeo.computeVertexNormals();
- const boulders=[];const rocksMesh=new THREE.InstancedMesh(rockGeo,rock,165),capsMesh=new THREE.InstancedMesh(capGeo,snowMaterial,165);
- for(let i=0;i<165;i++){
-  const a=random()*Math.PI*2,d=Math.sqrt(random())*108;let x=Math.cos(a)*d,z=Math.sin(a)*d;
-  if(i===0){x=6;z=5;}if(i===1){x=-4;z=-1;}
-  const size=.3+random()*1.65,y=snowHeight(x,z)-size*.35;
-  const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=random()*6;g.scale.set(size,size*(.55+random()*.3),size*(.8+random()*.3));
-  g.updateMatrixWorld();rocksMesh.setMatrixAt(i,g.matrixWorld);capsMesh.setMatrixAt(i,g.matrixWorld);boulders.push(g);
- }
- rocksMesh.castShadow=rocksMesh.receiveShadow=capsMesh.castShadow=capsMesh.receiveShadow=true;scene.add(rocksMesh,capsMesh);
- // Moss and fine branching lichen follow exposed boulder faces.
- const patchGeo=new THREE.IcosahedronGeometry(.075,1),moss=new THREE.InstancedMesh(patchGeo,mossMat,165*15),lichen=new THREE.InstancedMesh(patchGeo,lichenMat,165*15),o=new THREE.Object3D();let mi=0,li=0;
- for(const group of boulders){group.updateMatrixWorld();for(let j=0;j<15;j++){
-  const a=random()*Math.PI*2,y=-.05-random()*.55,v=new THREE.Vector3(Math.cos(a)*Math.sqrt(1-y*y),y,Math.sin(a)*Math.sqrt(1-y*y));
-  o.position.copy(v.multiplyScalar(1.055)).applyMatrix4(group.matrixWorld);o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.clone().normalize());o.scale.set(.6+random()*1.2,.11,.5+random());o.updateMatrix();moss.setMatrixAt(mi++,o.matrix);
-  o.position.add(new THREE.Vector3((random()-.5)*.05,.02,(random()-.5)*.05));o.scale.multiplyScalar(.38);o.updateMatrix();lichen.setMatrixAt(li++,o.matrix);
- }}scene.add(moss,lichen);
- const twigGeo=new THREE.CylinderGeometry(.008,.018,1,5);const twigMat=new THREE.MeshStandardMaterial({color:0x453c2e,roughness:1});
- const twigs=new THREE.InstancedMesh(twigGeo,twigMat,1800),leaves=new THREE.InstancedMesh(new THREE.SphereGeometry(1,7,4),new THREE.MeshStandardMaterial({color:0x6b4f30,roughness:1}),650);
- for(let i=0;i<1800;i++){
-  const a=random()*Math.PI*2,d=Math.sqrt(random())*105,x=Math.cos(a)*d,z=Math.sin(a)*d;o.position.set(x,snowHeight(x,z)+.015,z);o.rotation.set(Math.PI/2+(random()-.5)*.2,random()*6,random()*6);o.scale.set(1,.15+random()*.7,1);o.updateMatrix();twigs.setMatrixAt(i,o.matrix);
-  if(i<650){o.position.y+=.01;o.rotation.set(0,random()*6,.1);o.scale.set(.028+random()*.025,.006,.06+random()*.05);o.updateMatrix();leaves.setMatrixAt(i,o.matrix);}
- }twigs.castShadow=true;leaves.receiveShadow=true;scene.add(twigs,leaves);
- // Fallen timber, with physical bark, a snow mantle, and translucent icicles.
- const ice=new THREE.MeshPhysicalMaterial({color:0xc5e5ed,roughness:.12,transmission:0,clearcoat:1,thickness:.05,ior:1.31,transparent:true,opacity:.75});
- const icicleGeometries=[];
- for(let i=0;i<14;i++){
-  const x=i===0?7:(random()-.5)*170,z=i===0?1:(random()-.5)*170,y=snowHeight(x,z);const length=3+random()*5;
-  const log=new THREE.Group();log.position.set(x,y+.15,z);log.rotation.y=random()*6;
-  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18,.3,length,18,8),bark);trunk.rotation.z=Math.PI/2;trunk.castShadow=trunk.receiveShadow=true;log.add(trunk);
-  const mantle=new THREE.Mesh(new THREE.CapsuleGeometry(.29,length-.5,6,12),snowMaterial);mantle.rotation.z=Math.PI/2;mantle.scale.set(1,1,.8);mantle.position.y=.16;mantle.receiveShadow=true;log.add(mantle);
-  for(let j=0;j<12;j++){const icicle=new THREE.Mesh(new THREE.ConeGeometry(.012+random()*.013,.12+random()*.2,7),ice);icicle.rotation.z=Math.PI;icicle.position.set((random()-.5)*length,-.17,.19);log.updateMatrixWorld();icicle.updateMatrix();const geometry=icicle.geometry.clone().applyMatrix4(icicle.matrix).applyMatrix4(log.matrixWorld);icicleGeometries.push(geometry);icicle.geometry.dispose();}scene.add(log);
- }
- const iceMesh=new THREE.Mesh(mergeGeometries(icicleGeometries),ice);scene.add(iceMesh);icicleGeometries.forEach(g=>g.dispose());
- // Small stems poking out of the drifts, with forks instead of flat billboards.
- const grass=new THREE.InstancedMesh(new THREE.CylinderGeometry(.002,.006,1,4),new THREE.MeshStandardMaterial({color:0x8a8166,roughness:1}),2400);
- for(let i=0;i<2400;i++){const a=random()*6.283,d=Math.sqrt(random())*105,x=Math.cos(a)*d,z=Math.sin(a)*d;const h=.08+random()*.32;o.position.set(x,snowHeight(x,z)+h*.4,z);o.rotation.set((random()-.5)*.8,random()*6,(random()-.5)*.8);o.scale.set(1,h,1);o.updateMatrix();grass.setMatrixAt(i,o.matrix);}scene.add(grass);
-}
 function createSnowfall(){
  const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const c=canvas.getContext('2d');c.translate(64,64);c.strokeStyle='#ffffff';c.lineWidth=2;c.lineCap='round';
  for(let j=0;j<6;j++){c.save();c.rotate(j*Math.PI/3);c.beginPath();c.moveTo(0,0);c.lineTo(0,48);for(let y=17;y<45;y+=12){c.moveTo(-10,y-9);c.lineTo(0,y);c.lineTo(10,y-9);}c.stroke();c.restore();}

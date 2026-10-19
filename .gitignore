@@ -6,3 +6,4 @@ node_modules/
 dist/
 .openai/*.tar.gz
 *.log
+dist-review/
