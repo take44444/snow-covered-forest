@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "edge-east": {
+      "position": [
+        99,
+        48,
+        0
+      ],
+      "target": [
+        227.7,
+        15,
+        0
+      ],
+      "triangles": 5112355
+    },
+    "edge-north": {
+      "position": [
+        0,
+        48,
+        -99
+      ],
+      "target": [
+        0,
+        15,
+        -227.7
+      ],
+      "triangles": 6121116
+    },
+    "edge-west": {
+      "position": [
+        -99,
+        48,
+        0
+      ],
+      "target": [
+        -227.7,
+        15,
+        0
+      ],
+      "triangles": 4690907
+    },
+    "edge-south": {
+      "position": [
+        0,
+        48,
+        99
+      ],
+      "target": [
+        0,
+        15,
+        227.7
+      ],
+      "triangles": 5252487
+    },
+    "wide": {
+      "position": [
+        3,
+        0.35686335303550787,
+        11
+      ],
+      "target": [
+        1.8,
+        1.556863353035508,
+        -19
+      ],
+      "triangles": 6710825
+    }
+  },
+  "errors": []
+}

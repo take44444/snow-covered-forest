@@ -30,5 +30,12 @@ export function forestLayout() {
   if(trees.some(t=>(t.x-x)**2+(t.z-z)**2<8)) continue;
   trees.push({x,z,y:terrainHeight(x,z)-.12,height:10+r()*12,variant:Math.floor(r()*6),angle:r()*Math.PI*2,width:.8+r()*.5});
  }
+ // Surrounding scenery extends beyond every reachable viewpoint's mist cutoff.
+ const outer=randomGenerator(9017);
+ for(let i=0;i<1200;i++){
+  const a=outer()*Math.PI*2,radius=Math.sqrt(175**2+outer()*(260**2-175**2)),x=Math.cos(a)*radius,z=Math.sin(a)*radius;
+  if(trees.some(t=>(t.x-x)**2+(t.z-z)**2<8))continue;
+  trees.push({x,z,y:terrainHeight(x,z)-.12,height:10+outer()*12,variant:Math.floor(outer()*6),angle:outer()*Math.PI*2,width:.8+outer()*.5});
+ }
  return trees;
 }

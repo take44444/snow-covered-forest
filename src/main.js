@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import {Sky} from 'three/addons/objects/Sky.js';
 import {createForest} from './forest.js';
+import {createAtmosphere} from './atmosphere.js';
 import {createFrost} from './frost.js';
-import {needleCutout} from './needle-cutout.js';
 import {configureSnowMaterial,configureWorldMaterial} from './snow-material.js';
 import {createGroundDetails} from './ground-details.js';
 import {randomGenerator,noise,snowHeight,terrainHeight,constrainPosition,movementSpeed,WORLD_RADIUS,WARNING_RADIUS} from './world.js';
@@ -25,20 +25,20 @@ async function init(){
  const snowMap=texture(loader,'snow_02','diff'),snowNormal=texture(loader,'snow_02','nor_gl'),snowRough=texture(loader,'snow_02','rough');
  const snowMaterial=new THREE.MeshPhysicalMaterial({color:0xf0f5fa,map:snowMap,normalMap:snowNormal,normalScale:new THREE.Vector2(.45,.45),roughnessMap:snowRough,roughness:.93,metalness:0,clearcoat:.12,clearcoatRoughness:.45});
  configureSnowMaterial(snowMaterial);
- const branchSnow=configureSnowMaterial(snowMaterial.clone());
+ const branchSnow=configureWorldMaterial(snowMaterial.clone(),{repeat:.5,sparkle:true,albedoStrength:.2});
  const bark=new THREE.MeshStandardMaterial({map:texture(loader,'bark_brown_02','diff',2),normalMap:texture(loader,'bark_brown_02','nor_gl',2),roughnessMap:texture(loader,'bark_brown_02','rough',2),normalScale:new THREE.Vector2(.9,.9),roughness:1,color:0xa7aaa0});
  const rock=new THREE.MeshStandardMaterial({map:texture(loader,'rock_boulder_cracked','diff'),normalMap:texture(loader,'rock_boulder_cracked','nor_gl'),roughnessMap:texture(loader,'rock_boulder_cracked','rough'),roughness:1,color:0x8e9995});
  configureWorldMaterial(rock,{repeat:1,sparkle:false});
- const twig=texture(loader,'pine_tree_01_twig','diff'),twigAlpha=texture(loader,'pine_tree_01_twig','alpha'),twigNormal=texture(loader,'pine_tree_01_twig','nor_gl');
- for(const t of [twig,twigAlpha,twigNormal]){t.repeat.set(.295,.175);t.offset.set(.648,.477);}
+ const twig=texture(loader,'fir_tree_01_twig','diff'),twigNormal=texture(loader,'fir_tree_01_twig','nor_gl'),twigRough=texture(loader,'fir_tree_01_twig','rough');
 
  const mossMaps={diff:texture(loader,'moss_wood','diff'),normal:texture(loader,'moss_wood','nor_gl'),rough:texture(loader,'moss_wood','rough')};
  const sky=new Sky();sky.scale.setScalar(400);sky.material.uniforms.turbidity.value=5;sky.material.uniforms.rayleigh.value=1.2;sky.material.uniforms.mieCoefficient.value=.005;sky.material.uniforms.mieDirectionalG.value=.85;
- const sunDirection=new THREE.Vector3(-.5,.32,-.75).normalize();sky.material.uniforms.sunPosition.value.copy(sunDirection);scene.add(sky);
+ const sunDirection=new THREE.Vector3(-.5,.32,-.75).normalize();sky.material.uniforms.sunPosition.value.copy(sunDirection);
+ const atmosphere=createAtmosphere(scene.fog.color,sunDirection);scene.add(atmosphere);
  const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(sky,.04).texture;scene.environmentIntensity=.35;pmrem.dispose();
- scene.add(new THREE.HemisphereLight(0xdcecff,0x5b6d79,2));
+ scene.add(new THREE.HemisphereLight(0xdcecff,0x5b6d79,1));
  const sun=new THREE.DirectionalLight(0xffebcc,3.0);sun.position.copy(sunDirection.clone().multiplyScalar(70));sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-35;sun.shadow.camera.right=35;sun.shadow.camera.top=35;sun.shadow.camera.bottom=-35;sun.shadow.camera.near=1;sun.shadow.camera.far=155;sun.shadow.normalBias=.04;sun.shadow.bias=-.00015;sun.shadow.radius=3;scene.add(sun,sun.target);
- const terrain=new THREE.PlaneGeometry(460,460,440,440);terrain.rotateX(-Math.PI/2);const positions=terrain.attributes.position,uv=terrain.attributes.uv;const colors=[];
+ const terrain=new THREE.PlaneGeometry(640,640,640,640);terrain.rotateX(-Math.PI/2);const positions=terrain.attributes.position,uv=terrain.attributes.uv;const colors=[];
  for(let i=0;i<positions.count;i++){
   const x=positions.getX(i),z=positions.getZ(i);positions.setY(i,snowHeight(x,z));uv.setXY(i,x/2,z/2);
   const c=.89+noise(x*.12,z*.12)*.1;colors.push(c,c*.995,c);
@@ -47,8 +47,7 @@ async function init(){
  const ground=new THREE.Mesh(terrain,snowMaterial);ground.receiveShadow=true;scene.add(ground);
  await new Promise(resolve=>setTimeout(resolve,30));$('load-status').textContent='Laying snow on the branches…';
  await loaded;if(assetErrors.length)throw new Error('Some forest textures could not load. Please reload.');
- const cleanTwig=needleCutout(twig.image,twigAlpha.image);
- forest=createForest(scene,{bark,branchSnow,twig:cleanTwig,twigNormal});forest.update(camera);
+ forest=await createForest(scene,{bark,branchSnow,twig,twigNormal,twigRough,manager});forest.update(camera);
  const groundDetails=createGroundDetails(scene,{snowMaterial:branchSnow,bark,rock,mossMaps}),detailAnchors=groundDetails.anchors;groundDetails.update(camera);createSnowfall();frost=createFrost(scene);frost.update(camera);
  await loaded;
  if(assetErrors.length)throw new Error('Some forest textures could not load. Please reload.');
@@ -62,16 +61,16 @@ async function init(){
   if(elapsed-lastLOD>.5){const forestChanged=forest.update(camera);frost.update(camera);groundDetails.update(camera,state.quality);lastLOD=elapsed;const cx=Math.round(camera.position.x/8)*8,cz=Math.round(camera.position.z/8)*8;if(forestChanged||sun.target.position.x!==cx||sun.target.position.z!==cz){sun.target.position.set(cx,0,cz);sun.position.set(cx+sunDirection.x*70,sunDirection.y*70,cz+sunDirection.z*70);sun.target.updateMatrixWorld();renderer.shadowMap.needsUpdate=true;}}
   snow.material.uniforms.uTime.value=elapsed;snow.position.copy(camera.position);
   if(windGain&&state.sound){windGain.gain.setTargetAtTime(.025+Math.sin(elapsed*.23)*.009,audio.currentTime,.5);windFilter.frequency.setTargetAtTime(450+Math.sin(elapsed*.15)*180,audio.currentTime,.6);footGain.gain.setTargetAtTime(state.active&&(keys.has('KeyW')||keys.has('KeyS')||keys.has('KeyA')||keys.has('KeyD'))&&camera.position.y<snowHeight(camera.position.x,camera.position.z)+2.3?.008*(.4+Math.sin(elapsed*12)**6):0,audio.currentTime,.1);}
-  renderer.render(scene,camera);state.frames++;
+  atmosphere.position.copy(camera.position);renderer.render(scene,camera);state.frames++;
  });
  await renderer.compileAsync(scene,camera);state.ready=true;$('loading').classList.add('gone');setTimeout(()=>$('loading').hidden=true,1200);
  // This camera harness is compiled out of production builds.
  if(import.meta.env.MODE==='review'){
   renderer.setAnimationLoop(null);state.everEntered=true;
-  window.__forestReview={anchors:{trees:forest.layout,...detailAnchors},setView(position,target){
+  window.__forestReview={anchors:{trees:forest.layout,branch:forest.branchView(forest.layout.reduce((a,b)=>Math.hypot(a.x-3,a.z-11)<Math.hypot(b.x-3,b.z-11)?a:b)),...detailAnchors},setView(position,target){
    camera.position.fromArray(position);camera.lookAt(new THREE.Vector3(...target));yaw=camera.rotation.y;pitch=camera.rotation.x;camera.updateMatrixWorld();forest.update(camera);frost.update(camera);groundDetails.update(camera);
    sun.target.position.set(camera.position.x,0,camera.position.z);sun.position.copy(sun.target.position).addScaledVector(sunDirection,70);sun.target.updateMatrixWorld();renderer.shadowMap.needsUpdate=true;
-   renderer.render(scene,camera);return {position:camera.position.toArray(),target,triangles:renderer.info.render.triangles};
+   atmosphere.position.copy(camera.position);renderer.render(scene,camera);return {position:camera.position.toArray(),target,triangles:renderer.info.render.triangles};
   }};
  }
  // Read-only telemetry used by automated acceptance checks and performance inspection.
@@ -92,10 +91,7 @@ function updateMovement(dt){
  const forward=Number(keys.has('KeyW'))-Number(keys.has('KeyS')),side=Number(keys.has('KeyD'))-Number(keys.has('KeyA')),vertical=Number(keys.has('Space'))-Number(keys.has('ControlLeft')||keys.has('ControlRight'));
  const direction=new THREE.Vector3(side,vertical,-forward);if(direction.lengthSq()>0)direction.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(movementSpeed(keys)*dt);
  camera.position.add(direction);constrainPosition(camera.position);
- // Keep the camera outside trunks while allowing free flight above them.
- for(const t of forest.layout){const dx=camera.position.x-t.x,dz=camera.position.z-t.z,d=Math.hypot(dx,dz),radius=.31*t.width+.18;
-  if(d<radius&&camera.position.y<t.y+t.height&&d>.0001){camera.position.x=t.x+dx/d*radius;camera.position.z=t.z+dz/d*radius;}
- }
+ forest.constrainTrunks(camera.position);
  constrainPosition(camera.position);camera.rotation.set(pitch,yaw,0);
  const distance=Math.hypot(camera.position.x,camera.position.z);$('boundary').hidden=distance<WARNING_RADIUS;
  $('position').textContent=`${camera.position.x.toFixed(0)} E · ${(-camera.position.z).toFixed(0)} N / ${Math.max(0,WORLD_RADIUS-distance).toFixed(0)} M TO EDGE`;

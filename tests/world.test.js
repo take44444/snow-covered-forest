@@ -6,3 +6,7 @@ test('camera cannot descend into the snow or fly above the world',()=>{for(let x
 test('normal, slow and fast movement follow requested modifiers',()=>{assert.equal(movementSpeed(new Set()),4);assert.equal(movementSpeed(new Set(['ShiftLeft'])),14);assert.equal(movementSpeed(new Set(['ShiftRight'])),14);assert.equal(movementSpeed(new Set(['AltLeft'])),.8);assert.equal(movementSpeed(new Set(['AltRight'])),.8);});
 test('forest extends past the playable boundary in every direction',()=>{const trees=forestLayout();assert.ok(trees.length>600);for(let quadrant=0;quadrant<4;quadrant++)assert.ok(trees.filter(t=>Math.hypot(t.x,t.z)>110&&Math.floor((Math.atan2(t.z,t.x)+Math.PI)/(Math.PI/2))===quadrant).length>30);assert.deepEqual(trees,forestLayout());});
 test('seeded scene reproducible and terrain remains continuous',()=>{const a=randomGenerator(42),b=randomGenerator(42);for(let i=0;i<100;i++)assert.equal(a(),b());for(let x=-100;x<100;x++){assert.ok(Math.abs(snowHeight(x,0)-snowHeight(x+.001,0))<.01);}});
+
+test('surrounding trees continue behind the mist in every boundary direction',()=>{
+ const trees=forestLayout();for(let quadrant=0;quadrant<4;quadrant++){const outer=trees.filter(t=>Math.hypot(t.x,t.z)>240&&Math.floor((Math.atan2(t.z,t.x)+Math.PI)/(Math.PI/2))===quadrant);assert.ok(outer.length>25);}
+});
