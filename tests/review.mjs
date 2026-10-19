@@ -16,6 +16,8 @@ try{
  const tree=a.trees.reduce((best,t)=>Math.hypot(t.x-3,t.z-11)<Math.hypot(best.x-3,best.z-11)?t:best,a.trees[0]);
  for(const distance of [37,42.5,48])cases.push({name:'lod-'+distance,position:[tree.x+distance,tree.y+tree.height*.55,tree.z],target:[tree.x,tree.y+tree.height*.55,tree.z]});
  if(a.branch)cases.push({name:'branch',...a.branch});
+ const previousBranch=JSON.parse(fs.readFileSync('artifacts/reviews/crystal-smooth.json','utf8')).metadata.branch;
+ cases.push({name:'branch-reference',position:previousBranch.position,target:previousBranch.target});
  cases.push({name:'bark',position:[tree.x+.8,tree.y+1.3,tree.z],target:[tree.x+.3,tree.y+1.3,tree.z]});
  const rock=a.rocks[0],exposed=rock.exposed;if(exposed){const p=new THREE.Vector3(...exposed.position),n=new THREE.Vector3(...exposed.normal);cases.push({name:'rock',position:p.clone().addScaledVector(n,.5).add(new THREE.Vector3(0,.06,0)).toArray(),target:p.toArray()});}else cases.push({name:'rock',position:[rock.position[0],rock.position[1]+rock.scale[1]*.45,rock.position[2]+rock.scale[2]+.38],target:[rock.position[0],rock.position[1]+.08,rock.position[2]+rock.scale[2]*.75]});
  const moss=a.moss.find(m=>m.normal[1]>-.3)||a.moss[0];const mn=new THREE.Vector3(...moss.normal);const mp=new THREE.Vector3(...moss.position);

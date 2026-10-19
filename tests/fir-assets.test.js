@@ -19,6 +19,13 @@ test('tree detail levels retain source vertex positions rather than regenerate b
   }
  }
 });
+test('canopy carries bounded ambient visibility through every detail level',()=>{
+ for(const variant of variants)for(const level of variant.levels){
+  const uv=level.snow.attributes.uv;let shaded=0,open=0;
+  for(let i=0;i<uv.count;i++){const value=uv.getX(i);assert.ok(value>=.19&&value<=1);if(value<.8)shaded++;if(value>.9)open++;}
+  assert.ok(shaded>uv.count*.01,'cavities need occlusion');assert.ok(open>uv.count*.01,'open caps need ambient light');
+ }
+});
 test('crossfade covers every distance continuously with complementary detail levels',()=>{
  let previous=treeLodWeights(0);
  for(let d=0;d<200;d+=.01){const weights=treeLodWeights(d);assert.ok(Math.abs(weights.reduce((a,b)=>a+b,0)-1)<1e-10);weights.forEach((w,i)=>{assert.ok(w>=0&&w<=1);assert.ok(Math.abs(w-previous[i])<.006);});previous=weights;}

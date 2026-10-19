@@ -31,7 +31,7 @@ Normal movement is 4 m/s. Vertical controls allow free flight; the camera cannot
 
 - 1,993 deterministic trees in a 520 m diameter surrounding forest, using three authored fir forms with detailed textured trunks, geometric needles and foliage-derived snow deposits.
 - Three detail levels reduced successively from the same source meshes, spatial culling, and complementary coverage fades at 8–11 m and 38–47 m. Trunk clearance follows per-height envelopes derived from the meshes.
-- Undulating snow terrain with physically based 2K snow, bark and rock color, normal and roughness textures. Canopy snow uses cleaner albedo while retaining the physical surface normal map.
+- Undulating snow terrain with physically based 2K snow, bark and rock color, normal and roughness textures. Canopy snow uses cleaner albedo, a physical surface normal map and baked ambient occlusion in sheltered creases.
 - Snow-covered boulders with textured moss shoots and folded lichen, bowed fallen logs, tapered icicles above the snow, small stems, textured twigs and curled leaves with veins.
 - World-space snow and rock texture projection preserves detail across steep and instanced surfaces; fir needle geometry retains its source UV coordinates.
 - 900 tumbling, sixfold 3D dendrites (about 6 mm across), subpixel distant snowfall, 8,100 nearby millimetre-scale 3D ice grains, fine snow surface highlights, atmospheric sky, soft moving sun shadows, blue ambient light and distance haze.
@@ -78,6 +78,6 @@ The playable diameter remains 200 m. Surrounding trees extend to a 260 m radius,
 
 `npm run prepare:firs` downloads the CC0 source glTF/buffer into ignored `.cache/fir` and prepares the checked-in browser meshes. The original source buffer is approximately 478 MB. Meshoptimizer is a preparation-only dependency; no geometry simplification runs in the browser.
 
-The preparation script keeps complete source needle components in the nearest model, reduces lower levels successively, derives snow volumes on a 192-cell grid from the full foliage, welds their surfaces before recomputing world-space normals, and stores provenance/integrity metadata. The binary package is split into chunks of at most 8 MiB and loaded from the same origin. `tests/fir-assets.test.js` checks integrity, bounds, nested source positions, and fade coverage.
+The preparation script keeps complete source needle components in the nearest model, reduces lower levels successively, derives supported snow caps on a 256-cell grid from the full foliage, screens out layers sheltered by foliage immediately above, welds their surfaces before recomputing world-space normals, bakes local ambient visibility into the snow UV data, and stores provenance/integrity metadata. The binary package is split into chunks of at most 8 MiB and loaded from the same origin. `tests/fir-assets.test.js` checks integrity, bounds, nested source positions, and fade coverage.
 
-Visual review captures are stored in `artifacts/reviews`. Current images still show limitations in snow-mantle forms and close foliage; the original photorealism goal remains active.
+Visual review captures are stored in `artifacts/reviews`. The latest comparison and remaining visual gaps are described in `artifacts/reviews/canopy-assessment.md`. Snow forms and close foliage still fall short of the original photorealism goal, which remains active.

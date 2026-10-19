@@ -7,7 +7,8 @@ export async function createForest(scene,materials){
  const assets=await loadFirAssets(materials.manager),layout=forestLayout(),chunks=new Map(),object=new THREE.Object3D();
  const wood=configureWorldMaterial(materials.bark.clone(),{repeat:1,sparkle:false});
  const foliage=new THREE.MeshStandardMaterial({map:materials.twig,normalMap:materials.twigNormal,roughnessMap:materials.twigRough,normalScale:new THREE.Vector2(.35,.35),roughness:.9,side:THREE.DoubleSide,color:0x9aab92});
- const lodMaterials=[0,1,2].map(level=>({wood:configureTreeDither(wood,level),foliage:configureTreeDither(foliage,level),snow:configureTreeDither(materials.branchSnow,level)}));
+ const canopySnow=configureWorldMaterial(materials.branchSnow.clone(),{repeat:.5,sparkle:true,albedoStrength:.2,canopyOcclusion:true});
+ const lodMaterials=[0,1,2].map(level=>({wood:configureTreeDither(wood,level),foliage:configureTreeDither(foliage,level),snow:configureTreeDither(canopySnow,level)}));
  for(let i=0;i<layout.length;i++){
   const tree=layout[i],variant=tree.variant%assets.length,key=`${Math.floor(tree.x/28)},${Math.floor(tree.z/28)},${variant}`;
   if(!chunks.has(key))chunks.set(key,{trees:[],variant});

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import {mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
 import {MarchingCubes} from 'three/addons/objects/MarchingCubes.js';
 import {MeshoptSimplifier} from 'meshoptimizer';
+import {supportedArea,hasOverheadFoliage,capField,ambientVisibility,smoothVisibility} from './snow-support.mjs';
 const dir=process.env.FIR_SOURCE_DIR||'.cache/fir';
 const gltf=JSON.parse(fs.readFileSync(`${dir}/fir.gltf`,'utf8')),buffer=fs.readFileSync(`${dir}/fir.bin`);
 if(buffer.length!==gltf.buffers[0].byteLength)throw Error('Incomplete fir source buffer');
@@ -20,28 +21,36 @@ function sourcePart(p,scale){
  return {position,normal,uv:texcoord,indices:new Uint32Array(indices)};
 }
 function snowSurface(positions,variant){
- const res=192,mc=new MarchingCubes(res,new THREE.MeshBasicMaterial(),false,false,1200000),density=new Uint8Array(res**3),field=mc.field;
+ const res=256,maxTriangles=4000000,mc=new MarchingCubes(res,new THREE.MeshBasicMaterial(),false,false,maxTriangles),density=new Uint8Array(res**3),field=mc.field;
  const bounds=new THREE.Box3();for(let i=0;i<positions.length;i+=3)bounds.expandByPoint(new THREE.Vector3(positions[i],positions[i+1],positions[i+2]));bounds.expandByScalar(.4);
  const size=bounds.getSize(new THREE.Vector3()),step=size.clone().divideScalar(res-1),index=(x,y,z)=>x+res*(y+res*z);
  for(let i=0;i<positions.length;i+=3){const x=Math.round((positions[i]-bounds.min.x)/step.x),y=Math.round((positions[i+1]-bounds.min.y)/step.y),z=Math.round((positions[i+2]-bounds.min.z)/step.z),k=index(x,y,z);if(density[k]<255)density[k]++;}
- let deposits=0;
- for(let z=2;z<res-2;z++)for(let x=2;x<res-2;x++)for(let y=2;y<res-3;y++){
+ let deposits=0;const supportRadius=4,overheadCells=Math.ceil(.36/step.y);
+ for(let z=5;z<res-5;z++)for(let x=5;x<res-5;x++)for(let y=2;y<res-4;y++){
   if(density[index(x,y,z)]<3||density[index(x,y+1,z)]>=3)continue;
-  if(Math.sin(x*.12+z*.08+variant*2.3)*Math.cos(y*.12+variant)>.65)continue;
-  const jitter=Math.sin(x*17.1+z*31.7+y*5.1+variant)*.5+.5,rx=.065+jitter*.05,ry=.055+jitter*.055,rz=rx;
-  const gx=Math.ceil(rx/step.x),gy=Math.ceil(ry/step.y)+1,gz=Math.ceil(rz/step.z);
-  for(let dz=-gz;dz<=gz;dz++)for(let dy=-gy;dy<=gy;dy++)for(let dx=-gx;dx<=gx;dx++){
+  if(hasOverheadFoliage(density,index,x,y,z,Math.min(overheadCells,res-y-2)))continue;
+  const support=supportedArea(density,index,x,y,z,supportRadius);if(support<.22)continue;
+  const wx=bounds.min.x+x*step.x,wy=bounds.min.y+y*step.y,wz=bounds.min.z+z*step.z;
+  if(Math.sin(wx*2.7+wz*1.8+variant*2.3)*Math.cos(wy*1.3+variant)>.58)continue;
+  const jitter=Math.sin(wx*17.1+wz*31.7+wy*5.1+variant)*.5+.5,rx=.055+support*.055,depth=.085+support*.075+jitter*.012,rz=rx;
+  const gx=Math.ceil(rx/step.x),gy=Math.ceil(depth/step.y)+1,gz=Math.ceil(rz/step.z);
+  for(let dz=-gz;dz<=gz;dz++)for(let dy=-1;dy<=gy;dy++)for(let dx=-gx;dx<=gx;dx++){
    const xx=x+dx,yy=y+dy,zz=z+dz;if(xx<1||xx>=res-1||yy<1||yy>=res-1||zz<1||zz>=res-1)continue;
-   const d=(dx*step.x/rx)**2+((dy*step.y-.035)/ry)**2+(dz*step.z/rz)**2;if(d>=1)continue;const k=index(xx,yy,zz);field[k]=Math.max(field[k],100*(1-d));
+   const value=capField((dx*step.x/rx)**2+(dz*step.z/rz)**2,dy*step.y,depth);if(value<=0)continue;const k=index(xx,yy,zz);field[k]=Math.max(field[k],value);
   }deposits++;
  }
- mc.isolation=20;mc.blur(.5);mc.update();if(mc.count/3>1200000)throw Error('Snow mesh exceeds preparation buffer');
+ mc.isolation=20;mc.blur(.2);mc.update();if(mc.count/3>maxTriangles)throw Error('Snow mesh exceeds preparation buffer');
  const g=new THREE.BufferGeometry(),p=mc.geometry.attributes.position.array.slice(0,mc.count*3),uv=new Float32Array(mc.count*2);
  // MarchingCubes uses [-1,1] coordinates with cells spaced 2 / resolution.
  for(let i=0;i<p.length;i+=3){p[i]=bounds.min.x+(p[i]+1)*res*.5*step.x;p[i+1]=bounds.min.y+(p[i+1]+1)*res*.5*step.y;p[i+2]=bounds.min.z+(p[i+2]+1)*res*.5*step.z;}
  // Weld positions before constructing normals. MC normals are in grid space;
  // including them in the weld key splits shared vertices on this anisotropic grid.
  g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));const welded=mergeVertices(g,1e-4);welded.computeVertexNormals();g.dispose();mc.geometry.dispose();mc.material.dispose();
+ const pos=welded.attributes.position,norm=welded.attributes.normal,ao=welded.attributes.uv;
+ const isSolid=(x,y,z)=>{const ix=Math.round((x-bounds.min.x)/step.x),iy=Math.round((y-bounds.min.y)/step.y),iz=Math.round((z-bounds.min.z)/step.z);return ix>0&&ix<res-1&&iy>0&&iy<res-1&&iz>0&&iz<res-1&&field[index(ix,iy,iz)]>20;};
+ const visibility=new Float32Array(pos.count);
+ for(let i=0;i<pos.count;i++)visibility[i]=ambientVisibility(pos.getX(i),pos.getY(i),pos.getZ(i),norm.getX(i),norm.getY(i),norm.getZ(i),isSolid);
+ const smooth=smoothVisibility(visibility,welded.index.array);for(let i=0;i<pos.count;i++)ao.setXY(i,smooth[i],0);
  console.log('Snow deposits',variant,deposits,'triangles',welded.index.count/3);
  return {position:welded.attributes.position.array,normal:welded.attributes.normal.array,uv:welded.attributes.uv.array,indices:new Uint32Array(welded.index.array)};
 }
@@ -83,5 +92,5 @@ for(let v=0;v<gltf.meshes.length;v++){
  variants.push({sourceHeight:maxY,normalizationScale:scale,profile,levels});
 }
 fs.mkdirSync('public/models/fir',{recursive:true});const output=Buffer.concat(chunks);const bufferChunks=[];for(let start=0,i=0;start<output.length;start+=8*1024*1024,i++){const chunk=output.subarray(start,start+8*1024*1024),uri=`forest-${i}.bin`;fs.writeFileSync('public/models/fir/'+uri,chunk);bufferChunks.push({uri,byteLength:chunk.length,sha256:crypto.createHash('sha256').update(chunk).digest('hex')});}
-const description={version:1,source:'https://polyhaven.com/a/fir_tree_01',sourceSha256:crypto.createHash('sha256').update(buffer).digest('hex'),authors:['Rico Cilliers','Rob Tuytel'],license:'CC0-1.0',bufferChunks,byteLength:output.length,sha256:crypto.createHash('sha256').update(output).digest('hex'),variants};
+const description={version:1,snowPreparation:{gridResolution:256,overheadClearance:.36,ambientVisibility:{attribute:'uv.x',rays:8,distance:.32,smoothingIterations:12}},source:'https://polyhaven.com/a/fir_tree_01',sourceSha256:crypto.createHash('sha256').update(buffer).digest('hex'),authors:['Rico Cilliers','Rob Tuytel'],license:'CC0-1.0',bufferChunks,byteLength:output.length,sha256:crypto.createHash('sha256').update(output).digest('hex'),variants};
 fs.writeFileSync('public/models/fir/forest.json',JSON.stringify(description));console.log('Prepared forest assets',output.length,'bytes');
