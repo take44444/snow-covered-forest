@@ -20,7 +20,7 @@ function sourcePart(p,scale){
  return {position,normal,uv:texcoord,indices:new Uint32Array(indices)};
 }
 function snowSurface(positions,variant){
- const res=128,mc=new MarchingCubes(res,new THREE.MeshBasicMaterial(),false,false,1200000),density=new Uint8Array(res**3),field=mc.field;
+ const res=192,mc=new MarchingCubes(res,new THREE.MeshBasicMaterial(),false,false,1200000),density=new Uint8Array(res**3),field=mc.field;
  const bounds=new THREE.Box3();for(let i=0;i<positions.length;i+=3)bounds.expandByPoint(new THREE.Vector3(positions[i],positions[i+1],positions[i+2]));bounds.expandByScalar(.4);
  const size=bounds.getSize(new THREE.Vector3()),step=size.clone().divideScalar(res-1),index=(x,y,z)=>x+res*(y+res*z);
  for(let i=0;i<positions.length;i+=3){const x=Math.round((positions[i]-bounds.min.x)/step.x),y=Math.round((positions[i+1]-bounds.min.y)/step.y),z=Math.round((positions[i+2]-bounds.min.z)/step.z),k=index(x,y,z);if(density[k]<255)density[k]++;}
@@ -36,10 +36,12 @@ function snowSurface(positions,variant){
   }deposits++;
  }
  mc.isolation=20;mc.blur(.5);mc.update();if(mc.count/3>1200000)throw Error('Snow mesh exceeds preparation buffer');
- const g=new THREE.BufferGeometry(),p=mc.geometry.attributes.position.array.slice(0,mc.count*3),normal=mc.geometry.attributes.normal.array.slice(0,mc.count*3),uv=new Float32Array(mc.count*2);
+ const g=new THREE.BufferGeometry(),p=mc.geometry.attributes.position.array.slice(0,mc.count*3),uv=new Float32Array(mc.count*2);
  // MarchingCubes uses [-1,1] coordinates with cells spaced 2 / resolution.
  for(let i=0;i<p.length;i+=3){p[i]=bounds.min.x+(p[i]+1)*res*.5*step.x;p[i+1]=bounds.min.y+(p[i+1]+1)*res*.5*step.y;p[i+2]=bounds.min.z+(p[i+2]+1)*res*.5*step.z;}
- g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('normal',new THREE.BufferAttribute(normal,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));const welded=mergeVertices(g,1e-4);welded.computeVertexNormals();g.dispose();mc.geometry.dispose();mc.material.dispose();
+ // Weld positions before constructing normals. MC normals are in grid space;
+ // including them in the weld key splits shared vertices on this anisotropic grid.
+ g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));const welded=mergeVertices(g,1e-4);welded.computeVertexNormals();g.dispose();mc.geometry.dispose();mc.material.dispose();
  console.log('Snow deposits',variant,deposits,'triangles',welded.index.count/3);
  return {position:welded.attributes.position.array,normal:welded.attributes.normal.array,uv:welded.attributes.uv.array,indices:new Uint32Array(welded.index.array)};
 }

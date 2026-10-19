@@ -12,6 +12,7 @@ try{
  await page.goto(server.url,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>window.__forestReview);
  await page.addStyleTag({content:'header,footer,#intro,#loading,.vignette,#reticle{display:none!important}'});
  const a=await page.evaluate(()=>window.__forestReview.anchors),cases=[];
+ if(a.crystal)cases.push({name:'crystal',...a.crystal});
  const tree=a.trees.reduce((best,t)=>Math.hypot(t.x-3,t.z-11)<Math.hypot(best.x-3,best.z-11)?t:best,a.trees[0]);
  for(const distance of [37,42.5,48])cases.push({name:'lod-'+distance,position:[tree.x+distance,tree.y+tree.height*.55,tree.z],target:[tree.x,tree.y+tree.height*.55,tree.z]});
  if(a.branch)cases.push({name:'branch',...a.branch});
@@ -28,6 +29,13 @@ try{
  for(const p of a.icicles)if(p.position)assert.ok(p.position[1]-p.length>await page.evaluate(v=>window.__forest.terrainHeight(v[0],v[2]),p.position),'icicle tip must clear the snow');
  const cdp=await page.context().newCDPSession(page),prefix=process.env.REVIEW_PREFIX||'/tmp/boreal-review';
  const metadata={};
- for(const view of cases.filter(v=>!process.env.REVIEW_VIEWS||process.env.REVIEW_VIEWS.split(',').includes(v.name))){console.log('Rendering',view.name);metadata[view.name]=await page.evaluate(v=>window.__forestReview.setView(v.position,v.target),view);const image=await cdp.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(`${prefix}-${view.name}.png`,Buffer.from(image.data,'base64'));console.log('Saved',view.name);}
+ for(const view of cases.filter(v=>!process.env.REVIEW_VIEWS||process.env.REVIEW_VIEWS.split(',').includes(v.name))){
+  console.log('Rendering',view.name);metadata[view.name]=await page.evaluate(v=>window.__forestReview.setView(v.position,v.target),view);
+  let image;
+  if(view.name==='crystal'){
+   const probe=await page.evaluate(()=>window.__forestReview.probeSnow());metadata[view.name].visibleChannels=probe.visibleChannels;console.log('Snow image channels',probe.visibleChannels);assert.ok(probe.visibleChannels>100,'close-up snowflake must render visible pixels');image=probe.image;
+  }else image=(await cdp.send('Page.captureScreenshot',{format:'png'})).data;
+  fs.writeFileSync(`${prefix}-${view.name}.png`,Buffer.from(image,'base64'));console.log('Saved',view.name);
+ }
  fs.writeFileSync(`${prefix}.json`,JSON.stringify({metadata,errors},null,2));if(errors.length)throw Error(errors.join('\n'));console.log('Review complete',prefix);
 }finally{await browser.close();await server.close();}

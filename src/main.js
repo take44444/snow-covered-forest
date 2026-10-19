@@ -3,12 +3,13 @@ import {Sky} from 'three/addons/objects/Sky.js';
 import {createForest} from './forest.js';
 import {createAtmosphere} from './atmosphere.js';
 import {createFrost} from './frost.js';
+import {createSnowfall} from './snowfall.js';
 import {configureSnowMaterial,configureWorldMaterial} from './snow-material.js';
 import {createGroundDetails} from './ground-details.js';
-import {randomGenerator,noise,snowHeight,terrainHeight,constrainPosition,movementSpeed,WORLD_RADIUS,WARNING_RADIUS} from './world.js';
+import {noise,snowHeight,terrainHeight,constrainPosition,movementSpeed,WORLD_RADIUS,WARNING_RADIUS} from './world.js';
 const $=id=>document.getElementById(id);
 const state={ready:false,active:false,locked:false,sound:false,frames:0,fps:0,quality:'high'};
-const keys=new Set(),random=randomGenerator(312);
+const keys=new Set();
 let renderer,scene,camera,forest,frost,snow,clock,elapsed=0,yaw=.04,pitch=.04,audio,windGain,windFilter,footGain;
 const mobile=matchMedia('(pointer:coarse)').matches;
 const assetErrors=[];
@@ -48,7 +49,7 @@ async function init(){
  await new Promise(resolve=>setTimeout(resolve,30));$('load-status').textContent='Laying snow on the branches…';
  await loaded;if(assetErrors.length)throw new Error('Some forest textures could not load. Please reload.');
  forest=await createForest(scene,{bark,branchSnow,twig,twigNormal,twigRough,manager});forest.update(camera);
- const groundDetails=createGroundDetails(scene,{snowMaterial:branchSnow,bark,rock,mossMaps}),detailAnchors=groundDetails.anchors;groundDetails.update(camera);createSnowfall();frost=createFrost(scene);frost.update(camera);
+ const groundDetails=createGroundDetails(scene,{snowMaterial:branchSnow,bark,rock,mossMaps}),detailAnchors=groundDetails.anchors;groundDetails.update(camera);snow=createSnowfall(scene,renderer.getPixelRatio());snow.update(0,camera);frost=createFrost(scene);frost.update(camera);
  await loaded;
  if(assetErrors.length)throw new Error('Some forest textures could not load. Please reload.');
  clock=new THREE.Clock();
@@ -59,7 +60,7 @@ async function init(){
   if(state.active){let remaining=dt;while(remaining>0){const step=Math.min(.04,remaining);updateMovement(step);remaining-=step;}}
   else if(!state.everEntered){camera.position.y=snowHeight(3,11)+1.75+Math.sin(elapsed*.3)*.015;camera.rotation.set(pitch+Math.sin(elapsed*.07)*.005,yaw+Math.sin(elapsed*.045)*.012,0);}
   if(elapsed-lastLOD>.5){const forestChanged=forest.update(camera);frost.update(camera);groundDetails.update(camera,state.quality);lastLOD=elapsed;const cx=Math.round(camera.position.x/8)*8,cz=Math.round(camera.position.z/8)*8;if(forestChanged||sun.target.position.x!==cx||sun.target.position.z!==cz){sun.target.position.set(cx,0,cz);sun.position.set(cx+sunDirection.x*70,sunDirection.y*70,cz+sunDirection.z*70);sun.target.updateMatrixWorld();renderer.shadowMap.needsUpdate=true;}}
-  snow.material.uniforms.uTime.value=elapsed;snow.position.copy(camera.position);
+  snow.update(elapsed,camera);
   if(windGain&&state.sound){windGain.gain.setTargetAtTime(.025+Math.sin(elapsed*.23)*.009,audio.currentTime,.5);windFilter.frequency.setTargetAtTime(450+Math.sin(elapsed*.15)*180,audio.currentTime,.6);footGain.gain.setTargetAtTime(state.active&&(keys.has('KeyW')||keys.has('KeyS')||keys.has('KeyA')||keys.has('KeyD'))&&camera.position.y<snowHeight(camera.position.x,camera.position.z)+2.3?.008*(.4+Math.sin(elapsed*12)**6):0,audio.currentTime,.1);}
   atmosphere.position.copy(camera.position);renderer.render(scene,camera);state.frames++;
  });
@@ -67,10 +68,15 @@ async function init(){
  // This camera harness is compiled out of production builds.
  if(import.meta.env.MODE==='review'){
   renderer.setAnimationLoop(null);state.everEntered=true;
-  window.__forestReview={anchors:{trees:forest.layout,branch:forest.branchView(forest.layout.reduce((a,b)=>Math.hypot(a.x-3,a.z-11)<Math.hypot(b.x-3,b.z-11)?a:b)),...detailAnchors},setView(position,target){
+  window.__forestReview={anchors:{crystal:snow.reviewView(),trees:forest.layout,branch:forest.branchView(forest.layout.reduce((a,b)=>Math.hypot(a.x-3,a.z-11)<Math.hypot(b.x-3,b.z-11)?a:b)),...detailAnchors},setView(position,target){
    camera.position.fromArray(position);camera.lookAt(new THREE.Vector3(...target));yaw=camera.rotation.y;pitch=camera.rotation.x;camera.updateMatrixWorld();forest.update(camera);frost.update(camera);groundDetails.update(camera);
    sun.target.position.set(camera.position.x,0,camera.position.z);sun.position.copy(sun.target.position).addScaledVector(sunDirection,70);sun.target.updateMatrixWorld();renderer.shadowMap.needsUpdate=true;
    atmosphere.position.copy(camera.position);renderer.render(scene,camera);return {position:camera.position.toArray(),target,triangles:renderer.info.render.triangles};
+  },probeSnow(){
+   const gl=renderer.getContext(),a=new Uint8Array(120*120*4),b=new Uint8Array(a.length),size=renderer.getDrawingBufferSize(new THREE.Vector2());
+   snow.setVisible(false);renderer.render(scene,camera);gl.readPixels(size.x/2-60,size.y/2-60,120,120,gl.RGBA,gl.UNSIGNED_BYTE,a);
+   snow.setVisible(true);renderer.render(scene,camera);gl.readPixels(size.x/2-60,size.y/2-60,120,120,gl.RGBA,gl.UNSIGNED_BYTE,b);
+   return {visibleChannels:a.reduce((sum,value,i)=>sum+(Math.abs(value-b[i])>2?1:0),0),image:renderer.domElement.toDataURL('image/png').split(',')[1]};
   }};
  }
  // Read-only telemetry used by automated acceptance checks and performance inspection.
@@ -78,15 +84,6 @@ async function init(){
  }catch(error){console.error(error);showError(`This forest needs a browser with WebGL 2 support. ${error.message}`);}
 }
 function showError(message){$('loading').hidden=true;$('error').hidden=false;$('error').textContent=message;}
-function createSnowfall(){
- const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const c=canvas.getContext('2d');c.translate(64,64);c.strokeStyle='#ffffff';c.lineWidth=2;c.lineCap='round';
- for(let j=0;j<6;j++){c.save();c.rotate(j*Math.PI/3);c.beginPath();c.moveTo(0,0);c.lineTo(0,48);for(let y=17;y<45;y+=12){c.moveTo(-10,y-9);c.lineTo(0,y);c.lineTo(10,y-9);}c.stroke();c.restore();}
- const map=new THREE.CanvasTexture(canvas),count=2300,positions=[],sizes=[];
- for(let i=0;i<count;i++){positions.push((random()-.5)*65,(random()-.5)*40,(random()-.5)*65);sizes.push(.6+random()*1.5);}
- const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setAttribute('aSize',new THREE.Float32BufferAttribute(sizes,1));
- const mat=new THREE.ShaderMaterial({uniforms:{uTime:{value:0},uMap:{value:map},uRatio:{value:renderer.getPixelRatio()}},transparent:true,depthWrite:false,vertexShader:`attribute float aSize; uniform float uTime; uniform float uRatio; varying float vAlpha; void main(){vec3 p=position;p.y=mod(p.y-uTime*(.24+aSize*.1)+20.,40.)-20.;p.x+=sin(uTime*.25+p.z)*.7+uTime*.06;p.x=mod(p.x+32.5,65.)-32.5;p.z+=sin(p.x+uTime*.1)*.4;vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;gl_PointSize=clamp(aSize*17.*uRatio/-mv.z,1.,46.);vAlpha=smoothstep(0.3,2.,-mv.z)*(.28+aSize*.2);}`,fragmentShader:`uniform sampler2D uMap;varying float vAlpha;void main(){vec4 t=texture2D(uMap,gl_PointCoord);gl_FragColor=vec4(.93,.97,1.,t.a*vAlpha);}`});
- snow=new THREE.Points(geo,mat);snow.frustumCulled=false;scene.add(snow);
-}
 function updateMovement(dt){
  const forward=Number(keys.has('KeyW'))-Number(keys.has('KeyS')),side=Number(keys.has('KeyD'))-Number(keys.has('KeyA')),vertical=Number(keys.has('Space'))-Number(keys.has('ControlLeft')||keys.has('ControlRight'));
  const direction=new THREE.Vector3(side,vertical,-forward);if(direction.lengthSq()>0)direction.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(movementSpeed(keys)*dt);
@@ -127,6 +124,6 @@ async function toggleSound(){
  $('sound-state').textContent=state.sound?'ON':'OFF';$('sound').setAttribute('aria-label',state.sound?'Mute forest sound':'Enable forest sound');
 }
 $('sound').addEventListener('click',toggleSound);
-$('quality').addEventListener('change',e=>{state.quality=e.target.value;renderer.setPixelRatio(Math.min(devicePixelRatio,state.quality==='high'?1.75:1));renderer.shadowMap.enabled=state.quality==='high';renderer.shadowMap.needsUpdate=true;scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});snow.material.uniforms.uRatio.value=renderer.getPixelRatio();});
+$('quality').addEventListener('change',e=>{state.quality=e.target.value;renderer.setPixelRatio(Math.min(devicePixelRatio,state.quality==='high'?1.75:1));renderer.shadowMap.enabled=state.quality==='high';renderer.shadowMap.needsUpdate=true;scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});snow.resize(renderer.getPixelRatio());});
 window.addEventListener('resize',()=>{if(!camera)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 init();

@@ -11,7 +11,8 @@
     "test:browser": "node tests/browser.mjs",
     "review": "vite build --mode review --outDir dist-review && node tests/review.mjs",
     "test:production": "node tests/production-smoke.mjs",
-    "prepare:firs": "node scripts/download-firs.mjs && node --max-old-space-size=6144 scripts/prepare-firs.mjs"
+    "prepare:firs": "node scripts/download-firs.mjs && node --max-old-space-size=6144 scripts/prepare-firs.mjs",
+    "test:snowfall": "node tests/snowfall-render.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

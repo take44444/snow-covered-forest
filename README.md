@@ -34,7 +34,7 @@ Normal movement is 4 m/s. Vertical controls allow free flight; the camera cannot
 - Undulating snow terrain with physically based 2K snow, bark and rock color, normal and roughness textures. Canopy snow uses cleaner albedo while retaining the physical surface normal map.
 - Snow-covered boulders with textured moss shoots and folded lichen, bowed fallen logs, tapered icicles above the snow, small stems, textured twigs and curled leaves with veins.
 - World-space snow and rock texture projection preserves detail across steep and instanced surfaces; fir needle geometry retains its source UV coordinates.
-- Six-armed drifting snowflakes, 8,100 nearby millimetre-scale 3D ice grains, fine snow surface highlights, atmospheric sky, soft moving sun shadows, blue ambient light and distance haze.
+- 900 tumbling, sixfold 3D dendrites (about 6 mm across), subpixel distant snowfall, 8,100 nearby millimetre-scale 3D ice grains, fine snow surface highlights, atmospheric sky, soft moving sun shadows, blue ambient light and distance haze.
 - Optional synthesized ambient wind and movement texture. Audio starts only after interaction.
 
 All runtime material and font assets are served locally. No API keys or runtime network integrations are needed.
@@ -46,9 +46,12 @@ npm test
 npm run build
 npm run test:browser
 npm run test:production
+npm run test:snowfall
 # Dedicated close-up review with a camera harness omitted from production:
 npm run review
 ```
+
+The isolated snowfall render check measures visible pixels from a live crystal at centimetre range. The full-scene crystal review also compares the framebuffer with snowfall visible and hidden.
 
 The production smoke suite checks both rendering qualities, entry/movement/pause, warm-cache reload and absence of the review camera API. `npm run review` creates close-up, detail-transition, elevated edge and overview views under `/tmp/boreal-review-*.png` and checks plant exposure and icicle clearance. Use `REVIEW_PREFIX` or `REVIEW_VIEWS` to select the output prefix or views.
 
@@ -65,7 +68,7 @@ Materials and tree assets from **Poly Haven** are licensed **CC0** (see the link
 - [Fir Tree 01](https://polyhaven.com/a/fir_tree_01), source tree geometry and fir needle textures, by Rico Cilliers / Rob Tuytel
 - [Pine Tree 01](https://polyhaven.com/a/pine_tree_01), retained legacy twig atlas (Rico Cilliers / Rob Tuytel; no longer loaded by the fir renderer)
 
-Fonts: DM Sans (Colophon Foundry) and Manrope (Mikhail Sharanda), distributed under the SIL Open Font License. Fir geometry is derived from the credited model. Snow deposits, terrain, debris, atmosphere, snowflake map and audio are generated in source.
+Fonts: DM Sans (Colophon Foundry) and Manrope (Mikhail Sharanda), distributed under the SIL Open Font License. Fir geometry is derived from the credited model. Snow deposits, terrain, debris, atmosphere, snowflake geometry and audio are generated in source.
 
 This is a real-time procedural scene. Perceived realism depends on graphics hardware, resolution and viewing distance; it is not a scanned reconstruction of a real forest.
 
@@ -75,6 +78,6 @@ The playable diameter remains 200 m. Surrounding trees extend to a 260 m radius,
 
 `npm run prepare:firs` downloads the CC0 source glTF/buffer into ignored `.cache/fir` and prepares the checked-in browser meshes. The original source buffer is approximately 478 MB. Meshoptimizer is a preparation-only dependency; no geometry simplification runs in the browser.
 
-The preparation script keeps complete source needle components in the nearest model, reduces lower levels successively, derives snow volumes from the full foliage, and stores provenance/integrity metadata. The binary package is split into chunks of at most 8 MiB and loaded from the same origin. `tests/fir-assets.test.js` checks integrity, bounds, nested source positions, and fade coverage.
+The preparation script keeps complete source needle components in the nearest model, reduces lower levels successively, derives snow volumes on a 192-cell grid from the full foliage, welds their surfaces before recomputing world-space normals, and stores provenance/integrity metadata. The binary package is split into chunks of at most 8 MiB and loaded from the same origin. `tests/fir-assets.test.js` checks integrity, bounds, nested source positions, and fade coverage.
 
 Visual review captures are stored in `artifacts/reviews`. Current images still show limitations in snow-mantle forms and close foliage; the original photorealism goal remains active.
