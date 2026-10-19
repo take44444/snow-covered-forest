@@ -1,0 +1,8 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {WORLD_RADIUS,WARNING_RADIUS,randomGenerator,snowHeight,forestLayout,constrainPosition,movementSpeed} from '../src/world.js';
+test('200 m playable diameter with a warning before the edge',()=>{assert.equal(WORLD_RADIUS*2,200);assert.ok(WARNING_RADIUS<WORLD_RADIUS);for(let a=0;a<Math.PI*2;a+=.1){const p=constrainPosition({x:150*Math.cos(a),z:150*Math.sin(a),y:20});assert.ok(Math.hypot(p.x,p.z)<=100.00001);}});
+test('camera cannot descend into the snow or fly above the world',()=>{for(let x=-100;x<=100;x+=10){const p=constrainPosition({x,z:0,y:-100});assert.ok(p.y>=snowHeight(x,0)+.2499);assert.equal(constrainPosition({x,z:0,y:400}).y,65);}});
+test('normal, slow and fast movement follow requested modifiers',()=>{assert.equal(movementSpeed(new Set()),4);assert.equal(movementSpeed(new Set(['ShiftLeft'])),14);assert.equal(movementSpeed(new Set(['ShiftRight'])),14);assert.equal(movementSpeed(new Set(['AltLeft'])),.8);assert.equal(movementSpeed(new Set(['AltRight'])),.8);});
+test('forest extends past the playable boundary in every direction',()=>{const trees=forestLayout();assert.ok(trees.length>600);for(let quadrant=0;quadrant<4;quadrant++)assert.ok(trees.filter(t=>Math.hypot(t.x,t.z)>110&&Math.floor((Math.atan2(t.z,t.x)+Math.PI)/(Math.PI/2))===quadrant).length>30);assert.deepEqual(trees,forestLayout());});
+test('seeded scene reproducible and terrain remains continuous',()=>{const a=randomGenerator(42),b=randomGenerator(42);for(let i=0;i<100;i++)assert.equal(a(),b());for(let x=-100;x<100;x++){assert.ok(Math.abs(snowHeight(x,0)-snowHeight(x+.001,0))<.01);}});
